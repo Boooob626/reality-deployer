@@ -1,0 +1,21 @@
+# REALITY target SNI ban-list
+# 这些域名禁止用作 REALITY 的 serverNames / target。命中即拒绝并向用户解释原因。
+# 一行一个域名；支持通配 *.example.com（匹配自身及所有子域）。以 # 开头为注释/空行忽略。
+#
+# 维护原则：法律风险高、官方明令禁止、或稳定性差（被 CDN 拦截/返回挑战页）的域名。
+
+# ===== Apple =====
+# Apple 会因域名被用作代理前置而发 DMCA / 法律通知，且其 CDN 对 REALITY 前置有检测，
+# 极易导致服务器 IP 被标记。社区共识：禁止使用。
+apple.com
+*.apple.com
+icloud.com
+*.icloud.com
+mzstatic.com
+*.mzstatic.com
+apple-cloudkit.com
+*.apple-cloudkit.com
+cdn-apple.com
+*.cdn-apple.com
+appstore.com
+*.appstore.com

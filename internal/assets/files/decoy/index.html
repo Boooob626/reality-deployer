@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Domain}} — Project Page</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      line-height: 1.6; color: #1f2328; background: #f6f8fa;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 4rem 1.5rem; }
+    h1 { font-size: 1.9rem; margin: 0 0 .5rem; }
+    p.lead { color: #57606a; margin: 0 0 2rem; font-size: 1.05rem; }
+    .card {
+      background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+      padding: 1.5rem; margin-bottom: 1.25rem;
+    }
+    .card h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+    .tag {
+      display: inline-block; font-size: .75rem; padding: .15rem .5rem;
+      border-radius: 999px; background: #ddf4ff; color: #0969da; margin-right: .35rem;
+    }
+    footer { margin-top: 3rem; color: #6e7781; font-size: .85rem; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0d1117; color: #c9d1d9; }
+      .card { background: #161b22; border-color: #30363d; }
+      p.lead { color: #8b949e; }
+      .tag { background: #1f6feb22; color: #58a6ff; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>{{.Domain}}</h1>
+    <p class="lead">Personal project space. Nothing to see here right now.</p>
+
+    <div class="card">
+      <h2>Status</h2>
+      <p>This site is operational. Content is being prepared.</p>
+      <span class="tag">online</span><span class="tag">https</span>
+    </div>
+
+    <div class="card">
+      <h2>About</h2>
+      <p>A small corner of the internet for notes, experiments, and side projects.</p>
+    </div>
+
+    <footer>
+      &copy; <span id="y"></span> {{.Domain}}. Served by Angie.
+    </footer>
+  </main>
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
+</body>
+</html>

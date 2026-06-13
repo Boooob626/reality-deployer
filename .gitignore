@@ -1,0 +1,23 @@
+# Compiled binaries
+/bin/
+/dist/
+/reality-deployer
+/reality-deploy.exe
+*.exe
+
+# Go build cache / test artifacts
+*.test
+*.out
+coverage.txt
+
+# Generated runtime output (never commit deploy artifacts)
+/staging/
+/manifest.json
+/plan.sh
+apply.env
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
