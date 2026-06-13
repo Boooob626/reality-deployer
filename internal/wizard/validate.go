@@ -9,10 +9,18 @@ import (
 	"time"
 )
 
-var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+var emailRe = regexp.MustCompile(`^[A-Za-z0-9._%+\-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$`)
+var domainRe = regexp.MustCompile(`(?i)^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // validEmail 校验邮箱格式。
-func validEmail(s string) bool { return emailRe.MatchString(s) }
+func validEmail(s string) bool {
+	return emailRe.MatchString(s)
+}
+
+// validDomain 校验会被写入 Angie/Xray 配置的域名，避免无效域名或配置注入。
+func validDomain(s string) bool {
+	return len(s) <= 253 && domainRe.MatchString(s)
+}
 
 // detectPublicIP 枚举网卡，返回首个非回环、非私网的 IPv4（VPS 常见情形）。
 // 找不到公网时回退到首个非回环 IPv4；再找不到返回空串（向导让用户手填）。
@@ -66,13 +74,17 @@ func resolveDomain(domain string) ([]string, error) {
 	return out, nil
 }
 
-// portFreeTCP 做尽力而为的端口占用检测（监听即释放）。
-func portFreeTCP(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+// portFreeUDP 做尽力而为的 UDP 端口占用检测。
+func portFreeUDP(port int) bool {
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false
 	}
-	_ = ln.Close()
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
 	return true
 }
 

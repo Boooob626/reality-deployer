@@ -21,6 +21,7 @@ ufw_apply_rules() {
 ufw_revert_rules() {
   local rules="${STAGING}/ufw_rules.sh"
   if [ ! -f "$rules" ]; then warn "无 $rules，跳过 ufw 回收"; return 0; fi
+  ensure_ufw
   # shellcheck source=/dev/null
   source "$rules"
   ufw_revert || true

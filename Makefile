@@ -23,6 +23,21 @@ build-all: ## 交叉编译 VPS 常见架构（amd64 / arm64）
 	GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -o $(BIN_DIR)/$(APP)-linux-amd64 ./cmd/deploy
 	GOOS=linux GOARCH=arm64 go build $(GOFLAGS) -o $(BIN_DIR)/$(APP)-linux-arm64 ./cmd/deploy
 
+.PHONY: package
+package: build-all ## 生成 Release tarball（含二进制 + deploy.sh + scripts/）
+	rm -rf $(BIN_DIR)/package
+	for arch in amd64 arm64; do \
+	  stage="$(BIN_DIR)/package/linux-$$arch"; \
+	  mkdir -p "$$stage"; \
+	  install -m 0755 "$(BIN_DIR)/$(APP)-linux-$$arch" "$$stage/$(APP)"; \
+	  install -m 0755 deploy.sh install.sh "$$stage/"; \
+	  cp -R scripts "$$stage/scripts"; \
+	  chmod +x "$$stage/scripts/install.sh" "$$stage/scripts/uninstall.sh"; \
+	  install -m 0644 README.md LICENSE "$$stage/"; \
+	  tar -C "$$stage" -czf "$(BIN_DIR)/$(APP)-linux-$$arch.tar.gz" .; \
+	done
+	rm -rf $(BIN_DIR)/package
+
 .PHONY: vet
 vet: ## go vet
 	go vet $(PKG)

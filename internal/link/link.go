@@ -22,7 +22,9 @@ func All(m *manifest.Manifest) []Link {
 	for _, c := range m.Combos {
 		switch c.Type {
 		case combo.TypeVLESSReality:
-			out = append(out, Link{c.Type, "VLESS+Vision+REALITY", VLESSReality(m, c)})
+			if u := VLESSReality(m, c); u != "" {
+				out = append(out, Link{c.Type, "VLESS+Vision+REALITY", u})
+			}
 		case combo.TypeVLESSTLS:
 			out = append(out, Link{c.Type, "VLESS+Vision+TLS", VLESSTLS(m, c)})
 		case combo.TypeHysteria2:
@@ -35,10 +37,10 @@ func All(m *manifest.Manifest) []Link {
 // VLESSReality 构造 vless:// 链接（REALITY + Vision）。
 func VLESSReality(m *manifest.Manifest, c combo.Spec) string {
 	rt := m.Reality
-	sni := ""
-	if rt != nil && len(rt.ServerNames) > 0 {
-		sni = rt.ServerNames[0]
+	if rt == nil || rt.PublicKey == "" || len(rt.ServerNames) == 0 {
+		return ""
 	}
+	sni := rt.ServerNames[0]
 	q := url.Values{}
 	q.Set("encryption", "none")
 	q.Set("security", "reality")

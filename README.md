@@ -6,10 +6,10 @@
 
 | 层 | 语言 | 职责 |
 |---|---|---|
-| 向导 / 校验 / 配置渲染 | **Go** | 交互提示、DNS 与端口校验、Xray JSON / Angie conf / systemd 模板渲染、生成 `plan.sh` + `manifest.json` |
+| 向导 / 校验 / 配置渲染 | **Go** | 交互提示、DNS 与端口校验、Xray JSON / Angie conf / systemd 模板渲染、生成 `staging/` + `apply.env` + `manifest.json` |
 | 系统变更 | **Bash** | apt 安装、Angie 官方源、ufw、systemctl、文件落位、ACME 触发 |
 
-数据契约：Go 把决策写成 `manifest.json`（声明式记录，供卸载/重配）与 `plan.sh`（幂等的 bash 步骤）；`install.sh`（通用静态）执行 `plan.sh`。详见 [docs/architecture.md](docs/architecture.md)。
+数据契约：Go 把决策写成 `manifest.json`（声明式记录，供卸载/重配）、`apply.env`（安装参数）与 `staging/`（待落位配置）；`scripts/install.sh` 负责应用这些产物。详见 [docs/architecture.md](docs/architecture.md)。
 
 ## 支持的协议组合（向导中可多选并存）
 
@@ -50,7 +50,7 @@ cd /opt/reality-deployer && sudo ./deploy.sh
 
 向导会依次询问：域名（校验 DNS→本机 IP）、ACME 邮箱、协议组合、REALITY 源、Hysteria2 选项、路由预设、SSH 端口，确认后自动部署并打印 `vless://` / `hysteria2://` 连接链接。
 
-> 开发者：从源码构建 Release 产物用 `make build-all`（仅用于打包发布，VPS 上不需要）。
+> 开发者：从源码构建 Release tarball 用 `make package`（仅用于打包发布，VPS 上不需要）。
 
 ## 子命令
 

@@ -18,9 +18,19 @@ _rd_ok()  { printf '\033[32m✓\033[0m %s\n' "$*" >&2; }
 # —— VPS-only 守卫 ——
 [ "$(uname -s)" = "Linux" ] || _rd_die "仅支持 Linux VPS（当前: $(uname -s)）。"
 [ "$(id -u)" -eq 0 ] || _rd_die "请用 root 运行：curl ... | sudo bash"
+case "$DEST" in
+  ""|"/"|"/opt"|"/usr"|"/usr/local"|"/etc"|"/var")
+    _rd_die "DEST 不安全：$DEST"
+    ;;
+esac
 
-command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y curl; }
-command -v tar  >/dev/null 2>&1 || apt-get install -y tar
+missing=()
+command -v curl >/dev/null 2>&1 || missing+=(curl)
+command -v tar  >/dev/null 2>&1 || missing+=(tar)
+if [ "${#missing[@]}" -gt 0 ]; then
+  apt-get update -qq
+  apt-get install -y "${missing[@]}"
+fi
 
 # 架构 → asset 名
 case "$(uname -m)" in
@@ -57,6 +67,8 @@ _rd_ok "安装完成，启动向导…"
 # 否则向导读取交互输入会立即 EOF 死循环。
 if [ -t 0 ]; then
   exec ./deploy.sh "$@"
-else
+elif [ -r /dev/tty ]; then
   exec ./deploy.sh "$@" </dev/tty
+else
+  _rd_die "当前没有可交互终端（/dev/tty 不可用）。请登录 VPS 后运行：sudo $DEST/deploy.sh"
 fi

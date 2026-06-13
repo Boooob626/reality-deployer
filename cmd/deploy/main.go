@@ -78,10 +78,14 @@ func runScript(name string) error {
 	return nil
 }
 
-// scriptPath 查找脚本：优先 $REALITY_DEPLOYER_ROOT/scripts，其次 cwd/scripts。
+// scriptPath 查找脚本：优先 $REALITY_DEPLOYER_ROOT/scripts，其次二进制同级 scripts，再次 cwd/scripts。
 func scriptPath(name string) (string, error) {
-	candidates := []string{
-		filepath.Join(os.Getenv("REALITY_DEPLOYER_ROOT"), "scripts", name),
+	candidates := []string{}
+	if root := os.Getenv("REALITY_DEPLOYER_ROOT"); root != "" {
+		candidates = append(candidates, filepath.Join(root, "scripts", name))
+	}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "scripts", name))
 	}
 	if cwd, err := os.Getwd(); err == nil {
 		candidates = append(candidates, filepath.Join(cwd, "scripts", name))
@@ -134,6 +138,9 @@ func status() error {
 	}
 	fmt.Println("\n连接链接:")
 	for _, l := range link.All(m) {
+		if l.URL == "" {
+			continue
+		}
 		fmt.Printf("  [%s] %s\n", l.Name, l.URL)
 	}
 	return nil
@@ -150,6 +157,9 @@ func export() error {
 		return nil
 	}
 	for _, l := range links {
+		if l.URL == "" {
+			continue
+		}
 		fmt.Printf("[%s]\n%s\n", l.Name, l.URL)
 		printQR(l.URL)
 		fmt.Println()

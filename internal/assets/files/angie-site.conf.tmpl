@@ -2,21 +2,18 @@
 # Angie 内置 ACME（>= 1.5.0），HTTP-01 挑战在 :80。
 # 文档: https://en.angie.software/angie/docs/configuration/modules/http/http_acme/
 
-# ACME 客户端注册在 http{} 作用域
-acme_client le_{{.ClientID}} {
-    account_key /etc/angie/acme/{{.Domain}}.account.key;
-    email {{.Email}};
-}
+# ACME 客户端注册在 http{} 作用域。
+# Angie 的 acme_client 是指令而不是 block；resolver 与 directory URL 必填。
+resolver 1.1.1.1 8.8.8.8 valid=300s ipv6=off;
+acme_client {{.ClientID}} https://acme-v02.api.letsencrypt.org/directory
+    email={{.Email}};
 
-# :80 —— ACME HTTP-01 挑战响应 + 跳转 https
+# :80 —— HTTP-01 挑战 + 跳转 https
 server {
     listen 80;
     listen [::]:80;
     server_name {{.Domain}};
-
-    location /.well-known/acme-challenge/ {
-        acme_challenge le_{{.ClientID}};
-    }
+    acme {{.ClientID}};
 
     location / {
         return 301 https://$host$request_uri;
@@ -28,10 +25,11 @@ server {
     listen 127.0.0.1:8443 ssl;
     http2 on;
     server_name {{.Domain}};
+    acme {{.ClientID}};
 
     # 证书由 ACME 客户端签发，以变量形式引用
-    ssl_certificate     $acme_cert_le_{{.ClientID}};
-    ssl_certificate_key $acme_cert_key_le_{{.ClientID}};
+    ssl_certificate     $acme_cert_{{.ClientID}};
+    ssl_certificate_key $acme_cert_key_{{.ClientID}};
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_session_cache shared:SSL:10m;

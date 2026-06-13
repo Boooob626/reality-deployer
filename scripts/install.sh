@@ -46,29 +46,27 @@ if [ "${ENABLE_HYSTERIA2:-0}" = "1" ]; then
   gen_hy2_cert "$DOMAIN"
 fi
 
-# 4) VLESS-TLS 证书（best-effort；REALITY 组合无需证书文件）
-if [ "${ENABLE_VLESS_TLS:-0}" = "1" ]; then
-  provision_tls_cert "$DOMAIN" || warn "VLESS-TLS 证书暂缺，xray 可能启动失败——按提示放置证书后 'systemctl restart xray'"
-fi
-
-# 5) geo 数据（routing 的 geosite/geoip 规则依赖）
+# 4) geo 数据（routing 的 geosite/geoip 规则依赖）
 if [ ! -f /usr/local/share/xray/geosite.dat ]; then
   warn "缺少 /usr/local/share/xray/geosite.dat——CN 路由规则将不生效。Xray 官方脚本通常会附带，若缺失请手动补齐。"
 fi
 
-# 6) ufw（先放行 SSH/80/443/hy2，再 enable）
+# 5) ufw（先放行 SSH/80/443/hy2，再 enable）
 ufw_apply_rules
 
-# 6b) Hysteria2 端口跳跃（iptables REDIRECT 区间 → 监听端口）
+# 5b) Hysteria2 端口跳跃（iptables REDIRECT 区间 → 监听端口）
 hy2hop_apply
 
-# 7) systemd + Angie（ACME 随启动签发）→ 再起 Xray
+# 6) systemd + Angie（ACME 随启动签发）→ 准备证书 → 再起 Xray
 systemctl daemon-reload
 svc_enable_restart angie
 wait_angie_ready
+if [ "${ENABLE_VLESS_TLS:-0}" = "1" ]; then
+  provision_tls_cert "$DOMAIN" || die "VLESS-TLS 证书未就绪，无法启动 Xray。请检查 Angie ACME 日志与 80/tcp/DNS 后重试 apply。"
+fi
 svc_enable_restart xray
 
-# 8) 校验
+# 7) 校验
 log "校验配置语法…"
 angie -t || die "angie 配置校验失败（angie -t）"
 /usr/local/bin/xray run -test -config /usr/local/etc/xray/config.json \

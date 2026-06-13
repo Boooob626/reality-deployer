@@ -26,6 +26,7 @@ pkg_ensure() {
     dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p")
   done
   [ "${#missing[@]}" -eq 0 ] && return 0
+  apt-get update -qq
   apt-get install -y "${missing[@]}"
 }
 

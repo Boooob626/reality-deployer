@@ -52,3 +52,17 @@ func TestAllLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestAllSkipsMalformedReality(t *testing.T) {
+	m := &manifest.Manifest{
+		Domain: "example.com",
+		Combos: []combo.Spec{
+			{Type: combo.TypeVLESSReality, UUID: "uuid-x", Port: 443},
+			{Type: combo.TypeHysteria2, Port: 36712, Hy2Password: "pw"},
+		},
+	}
+	links := All(m)
+	if len(links) != 1 || links[0].Combo != combo.TypeHysteria2 {
+		t.Fatalf("malformed REALITY 应跳过且保留 hy2，got %+v", links)
+	}
+}

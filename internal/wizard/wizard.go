@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"reality-deployer/internal/combo"
@@ -104,7 +105,7 @@ func Run() error {
 	}, routingDefaultIdx())
 	m.Routing.AdBlock = confirm("屏蔽广告域名 (geosite:category-ads-all)？", adblockDefault())
 	// 7. SSH 端口
-	m.SSHPort = promptInt("SSH 端口（ufw 放行）", sshDefault())
+	m.SSHPort = promptPort("SSH 端口（ufw 放行）", sshDefault())
 	// 8. 防火墙
 	m.Firewall = manifest.BuildFirewall(specs, m.SSHPort)
 	// 9. 摘要 + 确认
@@ -214,6 +215,10 @@ func askDomain(m *manifest.Manifest) error {
 			fmt.Println("  域名必填。")
 			continue
 		}
+		if !validDomain(d) {
+			fmt.Println("  域名格式无效，请输入普通域名（如 example.com）。")
+			continue
+		}
 		m.Domain = d
 		detected := detectPublicIP()
 		m.PublicIP = detected
@@ -277,17 +282,18 @@ func askHysteria2() combo.Spec {
 	if prev != nil && prev.Port != 0 {
 		defPort = prev.Port
 	}
-	if !portFreeTCP(defPort) {
-		// 端口被占（可能是当前 xray），仍允许沿用
+	port := promptPort("Hysteria2 UDP 端口", defPort)
+	if !portFreeUDP(port) {
+		fmt.Printf("  ⚠  UDP %d 可能已被占用；如果这是当前 xray，可继续沿用。\n", port)
 	}
-	port := promptInt("Hysteria2 UDP 端口", defPort)
-	if port == 0 {
-		port = defPort
+	password := genPassword(16)
+	if prev != nil && prev.Hy2Password != "" {
+		password = prev.Hy2Password
 	}
 	s := combo.Spec{
 		Type:        combo.TypeHysteria2,
 		Port:        port,
-		Hy2Password: genPassword(16),
+		Hy2Password: password,
 	}
 	defObfs := false
 	if prev != nil && prev.Hy2Obfs == "salamander" {
@@ -314,9 +320,13 @@ func askHysteria2() combo.Spec {
 		if s.Hy2PortHop != "" {
 			def = s.Hy2PortHop
 		}
-		r := promptDefault("端口区间（起:止，如 20000:50000）", def)
-		if parts := strings.SplitN(r, ":", 2); len(parts) == 2 {
-			s.Hy2PortHop = strings.TrimSpace(parts[0]) + ":" + strings.TrimSpace(parts[1])
+		for {
+			r := promptDefault("端口区间（起:止，如 20000:50000）", def)
+			if normalized, ok := normalizePortRange(r); ok {
+				s.Hy2PortHop = normalized
+				break
+			}
+			fmt.Println("  端口区间无效，请输入 1-65535 内的 start:end，且 start <= end。")
 		}
 	} else {
 		s.Hy2PortHop = ""
@@ -368,7 +378,59 @@ func askRealityTarget(domain string, curated []string, ban *reality.List) (*real
 			break
 		}
 	}
-	return reality.Resolve(reality.Source(srcKey), domain, curatedPick, customSNI, ban)
+	rt, err := reality.Resolve(reality.Source(srcKey), domain, curatedPick, customSNI, ban)
+	if err != nil {
+		return nil, err
+	}
+	carryRealitySecrets(rt)
+	return rt, nil
+}
+
+func carryRealitySecrets(rt *reality.Target) {
+	if pf == nil || pf.Reality == nil || rt == nil {
+		return
+	}
+	if pf.Reality.PrivateKey == "" || pf.Reality.PublicKey == "" || len(pf.Reality.ShortIDs) == 0 {
+		return
+	}
+	rt.PrivateKey = pf.Reality.PrivateKey
+	rt.PublicKey = pf.Reality.PublicKey
+	rt.ShortIDs = append([]string(nil), pf.Reality.ShortIDs...)
+}
+
+func promptPort(label string, def int) int {
+	for {
+		v := prompt(fmt.Sprintf("%s [%d]", label, def))
+		if v == "" {
+			if def >= 1 && def <= 65535 {
+				return def
+			}
+			fmt.Println("  默认端口无效，请输入 1-65535 范围内的端口。")
+			continue
+		}
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			fmt.Println("  请输入数字端口。")
+			continue
+		}
+		if p >= 1 && p <= 65535 {
+			return p
+		}
+		fmt.Println("  端口必须在 1-65535 范围内。")
+	}
+}
+
+func normalizePortRange(s string) (string, bool) {
+	parts := strings.SplitN(strings.TrimSpace(s), ":", 2)
+	if len(parts) != 2 {
+		return "", false
+	}
+	start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || start < 1 || end < 1 || start > 65535 || end > 65535 || start > end {
+		return "", false
+	}
+	return fmt.Sprintf("%d:%d", start, end), true
 }
 
 func printSummary(m *manifest.Manifest) {

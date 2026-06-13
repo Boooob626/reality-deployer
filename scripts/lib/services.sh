@@ -22,6 +22,13 @@ wait_angie_ready() {
   warn "Angie 就绪检测超时——ACME 可能仍在签发，或 80/443 未就绪。请稍后用 'curl -vk https://<domain>/' 复查。"
 }
 
+angie_acme_client_id() {
+  local id="${1,,}"
+  id="${id//./_}"
+  id="${id//-/_}"
+  printf 'le_%s\n' "$id"
+}
+
 # 生成 Hysteria2 自签证书（EC prime256v1，10 年）。
 gen_hy2_cert() {
   local domain="$1" dir=/usr/local/etc/xray
@@ -36,30 +43,38 @@ gen_hy2_cert() {
   ok "Hysteria2 证书已生成"
 }
 
-# VLESS-TLS 证书置备（best-effort）。
-# Angie 内置 ACME 主要服务自身 TLS；要让 Xray 复用，需把 fullchain+key 导出为 PEM 文件。
-# 此处尽力而为：若 Angie 已导出则复用；否则给出明确的手动放置指引（不静默失败）。
+# VLESS-TLS 证书置备。
+# Angie ACME 证书默认位于 acme_client_path/<client>/{certificate.pem,private.key}。
+# Xray 需要稳定文件路径，因此复制一份到 /etc/angie/acme/<domain>.*。
 provision_tls_cert() {
-  local domain="$1"
-  local cert="/etc/angie/acme/$domain.fullchain.pem"
-  local key="/etc/angie/acme/$domain.key"
+  local domain="$1" client cert key wait_until src_dir
+  client="$(angie_acme_client_id "$domain")"
+  cert="/etc/angie/acme/$domain.fullchain.pem"
+  key="/etc/angie/acme/$domain.key"
   mkdir -p /etc/angie/acme
   if [ -f "$cert" ] && [ -f "$key" ]; then
     ok "VLESS-TLS 证书已就绪（$cert）"; return 0
   fi
-  local store=""
-  for d in /var/lib/angie/acme /var/db/angie/acme /etc/angie/acme-state; do
-    [ -d "$d" ] && store="$d" && break
+
+  wait_until=$((SECONDS + ${TLS_WAIT_SECONDS:-120}))
+  while :; do
+    for src_dir in \
+      "/etc/angie/acme/$client" \
+      "/var/lib/angie/acme/$client" \
+      "/var/db/angie/acme/$client" \
+      "/etc/angie/acme-state/$client"; do
+      if [ -f "$src_dir/certificate.pem" ] && [ -f "$src_dir/private.key" ]; then
+        install -m 0644 "$src_dir/certificate.pem" "$cert"
+        install -m 0600 "$src_dir/private.key" "$key"
+        ok "VLESS-TLS 证书已导出（$cert）"
+        return 0
+      fi
+    done
+    [ "$SECONDS" -ge "$wait_until" ] && break
+    sleep 2
   done
-  if [ -n "$store" ]; then
-    warn "尝试从 Angie ACME 存储 ($store) 导出证书…"
-    cp -a "$store"/*"$domain"* /etc/angie/acme/ 2>/dev/null || true
-  fi
-  if [ ! -f "$cert" ] || [ ! -f "$key" ]; then
-    warn "VLESS-TLS 需要证书文件：$cert 与 $key"
-    warn "Angie 内置 ACME 主要面向自身 TLS；供 Xray 使用时需导出 fullchain+key。"
-    warn "请用 ACME deploy-hook 导出，或手动放置后执行：systemctl restart xray"
-    return 1
-  fi
-  ok "VLESS-TLS 证书已就绪"
+
+  warn "VLESS-TLS 需要证书文件：$cert 与 $key"
+  warn "未在 Angie ACME 存储中找到 $client/certificate.pem 与 private.key。"
+  return 1
 }

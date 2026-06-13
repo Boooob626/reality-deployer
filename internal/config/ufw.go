@@ -23,8 +23,6 @@ func UFWScript(fw manifest.Firewall) string {
 	b.WriteString("# 提供 ufw_apply / ufw_revert；规则与 manifest.Firewall 一一对应。\n\n")
 
 	b.WriteString("ufw_apply() {\n")
-	b.WriteString("  ufw --force default deny incoming\n")
-	b.WriteString("  ufw --force default allow outgoing\n")
 	for _, r := range fw.Rules {
 		fmt.Fprintf(&b, "  ufw --force allow %s   # %s\n", ufwSpec(r), r.Note)
 	}
@@ -32,7 +30,7 @@ func UFWScript(fw manifest.Firewall) string {
 
 	b.WriteString("ufw_revert() {\n")
 	for _, r := range fw.Rules {
-		fmt.Fprintf(&b, "  ufw --force delete allow %s   # %s\n", ufwSpec(r), r.Note)
+		fmt.Fprintf(&b, "  ufw --force delete allow %s >/dev/null 2>&1 || true   # %s\n", ufwSpec(r), r.Note)
 	}
 	b.WriteString("}\n")
 	return b.String()

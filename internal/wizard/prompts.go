@@ -48,19 +48,6 @@ func promptDefault(label, def string) string {
 	return v
 }
 
-// promptInt 带默认值的整数输入。
-func promptInt(label string, def int) int {
-	v := prompt(fmt.Sprintf("%s [%d]", label, def))
-	if v == "" {
-		return def
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return def
-	}
-	return n
-}
-
 // confirm 是/否确认。
 func confirm(label string, def bool) bool {
 	hint := "Y/n"

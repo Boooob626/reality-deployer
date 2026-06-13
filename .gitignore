@@ -13,7 +13,6 @@ coverage.txt
 # Generated runtime output (never commit deploy artifacts)
 /staging/
 /manifest.json
-/plan.sh
 apply.env
 
 # Editor / OS

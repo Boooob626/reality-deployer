@@ -28,8 +28,8 @@ func mustReality(t *testing.T) *reality.Target {
 func TestXrayRenderProducesValidJSON(t *testing.T) {
 	rt := mustReality(t)
 	m := &manifest.Manifest{
-		Domain: "example.com",
-		Email:  "a@example.com",
+		Domain:  "example.com",
+		Email:   "a@example.com",
 		SSHPort: 22,
 		Combos: []combo.Spec{
 			{Type: combo.TypeVLESSReality, UUID: "11111111-1111-1111-1111-111111111111", Port: 443, Flow: "xtls-rprx-vision"},
@@ -122,7 +122,7 @@ func TestUFWScriptHasApplyRevert(t *testing.T) {
 		},
 	}
 	s := UFWScript(fw)
-	for _, want := range []string{"ufw_apply()", "ufw_revert()", "22/tcp", "20000:50000/udp", "default deny incoming"} {
+	for _, want := range []string{"ufw_apply()", "ufw_revert()", "22/tcp", "20000:50000/udp", "|| true"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("ufw 脚本缺少 %q\n%s", want, s)
 		}
@@ -189,7 +189,21 @@ func TestRenderWritesAllArtifacts(t *testing.T) {
 	}
 	// angie conf 含 ACME client 与域名
 	angie, _ := os.ReadFile(filepath.Join(base, "staging/angie/example.com.conf"))
-	if !strings.Contains(string(angie), "acme_client") || !strings.Contains(string(angie), "example.com") {
-		t.Error("angie conf 缺少 acme_client 或域名")
+	for _, want := range []string{
+		"resolver 1.1.1.1 8.8.8.8",
+		"acme_client le_example_com https://acme-v02.api.letsencrypt.org/directory",
+		"acme le_example_com;",
+		"$acme_cert_le_example_com",
+		"example.com",
+	} {
+		if !strings.Contains(string(angie), want) {
+			t.Errorf("angie conf 缺少 %q", want)
+		}
+	}
+	if strings.Contains(string(angie), "acme_challenge") || strings.Contains(string(angie), "le_le_") {
+		t.Errorf("angie conf 含旧 ACME 写法:\n%s", string(angie))
+	}
+	if strings.Contains(string(angie), "acme_client_path /etc/angie/acme") {
+		t.Errorf("angie conf 不应把 ACME 存储改到 /etc:\n%s", string(angie))
 	}
 }

@@ -13,8 +13,18 @@ install_xray() {
     return 0
   fi
   log "安装 Xray-core（官方脚本）…"
-  bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install \
-    || die "Xray 安装失败"
+  local installer
+  installer="$(mktemp)"
+  if ! curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o "$installer"; then
+    rm -f "$installer"
+    die "下载 Xray 安装脚本失败"
+  fi
+  if ! bash "$installer" install; then
+    rm -f "$installer"
+    die "Xray 安装失败"
+  fi
+  rm -f "$installer"
+  command -v xray >/dev/null 2>&1 || die "Xray 安装后仍找不到 xray 命令"
   ok "Xray 安装完成"
 }
 
@@ -27,6 +37,7 @@ install_angie() {
   log "安装 Angie（官方仓库）…"
   pkg_ensure ca-certificates curl gnupg
   local keyring=/usr/share/keyrings/angie-signing.gpg
+  mkdir -p "$(dirname "$keyring")"
   curl -fsSL https://angie.software/keys/angie-signing.gpg \
     | gpg --dearmor --yes -o "$keyring" || die "下载 Angie 签名密钥失败"
   echo "deb [signed-by=$keyring] https://download.angie.software/angie/$DISTRO_ID $DISTRO_CODENAME main" \
