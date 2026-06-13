@@ -53,4 +53,10 @@ chmod +x "$DEST/reality-deployer" "$DEST/deploy.sh" 2>/dev/null || true
 
 cd "$DEST"
 _rd_ok "安装完成，启动向导…"
-exec ./deploy.sh "$@"
+# curl|bash 时本脚本的 stdin 是管道（已耗尽→EOF）；把向导的 stdin 重新接到控制终端，
+# 否则向导读取交互输入会立即 EOF 死循环。
+if [ -t 0 ]; then
+  exec ./deploy.sh "$@"
+else
+  exec ./deploy.sh "$@" </dev/tty
+fi

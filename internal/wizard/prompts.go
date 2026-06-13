@@ -17,11 +17,18 @@ type opt struct {
 	Desc string
 }
 
-// readLine 读取一行并去空白。
+// readLine 读取一行并去空白。stdin 关闭（EOF 无数据）时干净退出，避免死循环。
 func readLine() string {
 	line, err := reader.ReadString('\n')
-	if err != nil && line == "" {
-		return ""
+	if err != nil {
+		if line == "" {
+			// stdin 已关闭——常见于 curl|bash 未接 tty，或非交互运行。
+			fmt.Fprintln(os.Stderr, "\n✗ 无交互输入（stdin 已关闭）。")
+			fmt.Fprintln(os.Stderr, "  推荐改用：curl -fsSL <url> -o install.sh && sudo bash install.sh")
+			fmt.Fprintln(os.Stderr, "  或在已下载目录直接：sudo ./deploy.sh")
+			os.Exit(1)
+		}
+		// 有部分数据但无结尾换行，照常返回
 	}
 	return strings.TrimSpace(line)
 }
