@@ -1,29 +1,37 @@
 #!/usr/bin/env bash
-# Reality Deployer —— root 入口。
+# Reality Deployer —— VPS 入口。
+# 二进制随 Release tarball 下发，**不在 VPS 上编译**（无需 make / Go 工具链）。
+#
 # 用法：
-#   sudo ./deploy.sh                 # 向导，结束后询问是否应用
-#   sudo ./deploy.sh wizard          # 仅向导
-#   sudo ./deploy.sh apply           # 应用到系统
-#   sudo ./deploy.sh uninstall       # 卸载
-#   ./deploy.sh status|export        # 只读，无需 root
+#   sudo ./deploy.sh                  # 向导 → 询问是否应用（默认）
+#   sudo ./deploy.sh wizard|apply|uninstall
+#   ./deploy.sh  status|export
+#
+# 一键安装（见 install.sh）：
+#   curl -fsSL https://raw.githubusercontent.com/Boooob626/reality-deployer/main/install.sh | sudo bash
 set -euo pipefail
+
+# —— VPS-only 守卫 ——
+[ "$(uname -s)" = "Linux" ] || { printf '\033[31m✗\033[0m 仅支持 Linux VPS（当前: %s）\n' "$(uname -s)" >&2; exit 1; }
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export REALITY_DEPLOYER_ROOT="$HERE"
 
-# 内联最小日志（避免依赖 lib，使本入口自包含）
 _rd_die() { printf '\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
-# 定位二进制
+# 定位二进制（tarball 解压后位于 $HERE/reality-deployer）
 BIN=""
 for c in \
   "$HERE/reality-deployer" \
-  "$HERE/dist/reality-deployer" \
-  "$HERE/dist/reality-deployer-linux-amd64" \
+  "$HERE/reality-deployer-linux-amd64" \
+  "$HERE/reality-deployer-linux-arm64" \
   "$(command -v reality-deployer 2>/dev/null || true)"; do
   if [ -n "$c" ] && [ -x "$c" ]; then BIN="$c"; break; fi
 done
-[ -n "$BIN" ] || _rd_die "找不到 reality-deployer 二进制。先运行：make build   （或 make build-all 交叉编译）"
+
+[ -n "$BIN" ] || _rd_die "找不到 reality-deployer 二进制。
+一键安装：
+  curl -fsSL https://raw.githubusercontent.com/Boooob626/reality-deployer/main/install.sh | sudo bash"
 
 SUBCMD="${1:-wizard}"
 case "$SUBCMD" in
@@ -36,13 +44,13 @@ case "$SUBCMD" in
     ;;
   wizard|help|-h|--help)
     ;;
-    *)
+  *)
     echo "用法: $0 [wizard|apply|uninstall|status|export]" >&2
     exit 2
     ;;
 esac
 
-# 默认：向导 → 询问是否立即应用
+# 默认：向导 → 询问是否应用
 "$BIN" wizard
 echo
 if [ "$(id -u)" -eq 0 ]; then

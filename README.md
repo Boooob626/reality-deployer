@@ -30,19 +30,27 @@
 
 ## 快速开始
 
+> **仅运行在 Linux VPS（Debian/Ubuntu）上。** 一键脚本从 GitHub Release 下载**预编译二进制**（含 `scripts/`），解压即用——**不在 VPS 上编译，无需 make / Go 工具链 / scp**。
+
+### 方式一：一键（curl，推荐）
+
 ```bash
-# 1. 在开发机交叉编译（产物自带，VPS 无需装 Go）
-make build-all
+curl -fsSL https://raw.githubusercontent.com/Boooob626/reality-deployer/main/install.sh | sudo bash
+```
 
-# 2. 把二进制 + 入口 + 脚本目录传到 VPS（模板/数据已 embed 进二进制）
-scp -r dist/reality-deployer-linux-amd64 deploy.sh scripts user@vps:/opt/reality-deployer/
+### 方式二：手动下载 Release
 
-# 3. 在 VPS 上以 root 运行
-ssh user@vps
+从 [Releases](https://github.com/Boooob626/reality-deployer/releases) 下载对应架构的 `reality-deployer-linux-<arch>.tar.gz`，解压后运行：
+
+```bash
+mkdir -p /opt/reality-deployer
+tar -xzf reality-deployer-linux-amd64.tar.gz -C /opt/reality-deployer
 cd /opt/reality-deployer && sudo ./deploy.sh
 ```
 
 向导会依次询问：域名（校验 DNS→本机 IP）、ACME 邮箱、协议组合、REALITY 源、Hysteria2 选项、路由预设、SSH 端口，确认后自动部署并打印 `vless://` / `hysteria2://` 连接链接。
+
+> 开发者：从源码构建 Release 产物用 `make build-all`（仅用于打包发布，VPS 上不需要）。
 
 ## 子命令
 
