@@ -2,6 +2,7 @@
 package link
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -27,6 +28,8 @@ func All(m *manifest.Manifest) []Link {
 			}
 		case combo.TypeVLESSTLS:
 			out = append(out, Link{c.Type, "VLESS+Vision+TLS", VLESSTLS(m, c)})
+		case combo.TypeVLESSXHTTP:
+			out = append(out, Link{c.Type, "VLESS+XHTTP+TLS", VLESSXHTTP(m, c)})
 		case combo.TypeHysteria2:
 			out = append(out, Link{c.Type, "Hysteria2", Hysteria2(m, c)})
 		}
@@ -67,6 +70,46 @@ func VLESSTLS(m *manifest.Manifest, c combo.Spec) string {
 	q.Set("flow", "xtls-rprx-vision")
 	return fmt.Sprintf("vless://%s@%s:%d?%s#%s",
 		c.UUID, m.Domain, c.Port, q.Encode(), url.PathEscape("vless-tls"))
+}
+
+// VLESSXHTTP 构造 vless:// 链接（XHTTP + TLS）。
+func VLESSXHTTP(m *manifest.Manifest, c combo.Spec) string {
+	path := c.XHTTPPath
+	if path == "" {
+		path = "/xhttp"
+	}
+	mode := c.XHTTPMode
+	if mode == "" {
+		mode = "auto"
+	}
+	q := url.Values{}
+	q.Set("encryption", "none")
+	q.Set("security", "tls")
+	q.Set("sni", m.Domain)
+	q.Set("fp", "chrome")
+	q.Set("type", "xhttp")
+	q.Set("host", m.Domain)
+	q.Set("path", path)
+	q.Set("mode", mode)
+	q.Set("extra", xhttpClientExtra())
+	return fmt.Sprintf("vless://%s@%s:%d?%s#%s",
+		c.UUID, m.Domain, c.Port, q.Encode(), url.PathEscape("xhttp-tls"))
+}
+
+func xhttpClientExtra() string {
+	extra := map[string]any{
+		"xPaddingBytes": "100-1000",
+		"xmux": map[string]any{
+			"maxConcurrency":   "16-32",
+			"maxConnections":   0,
+			"cMaxReuseTimes":   0,
+			"hMaxRequestTimes": "600-900",
+			"hMaxReusableSecs": "1800-3000",
+			"hKeepAlivePeriod": 0,
+		},
+	}
+	b, _ := json.Marshal(extra)
+	return string(b)
 }
 
 // Hysteria2 构造 hysteria2:// 链接（自签证书 → insecure=1）。

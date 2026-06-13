@@ -10,14 +10,19 @@ import (
 func TestBuildFirewall(t *testing.T) {
 	combos := []combo.Spec{
 		{Type: combo.TypeVLESSReality, Port: 443},
+		{Type: combo.TypeVLESSXHTTP, Port: 443},
 		{Type: combo.TypeHysteria2, Port: 36712, Hy2PortHop: "20000:50000"},
 	}
 	fw := BuildFirewall(combos, 2222)
 	wantPorts := map[int]bool{2222: false, 80: false, 443: false, 36712: false}
 	var sawHop bool
+	var count443 int
 	for _, r := range fw.Rules {
 		if r.Port != 0 {
 			wantPorts[r.Port] = true
+		}
+		if r.Port == 443 && r.Proto == "tcp" {
+			count443++
 		}
 		if r.Range == "20000:50000" {
 			sawHop = true
@@ -30,6 +35,16 @@ func TestBuildFirewall(t *testing.T) {
 	}
 	if !sawHop {
 		t.Error("缺少 hysteria2 端口跳跃区间规则")
+	}
+	if count443 != 1 {
+		t.Fatalf("443/tcp 应只放行一次，got %d", count443)
+	}
+}
+
+func TestNewDefaults(t *testing.T) {
+	m := New()
+	if m.Routing.Preset != "block_cn_ru" {
+		t.Fatalf("默认路由应屏蔽 CN/RU，got %q", m.Routing.Preset)
 	}
 }
 

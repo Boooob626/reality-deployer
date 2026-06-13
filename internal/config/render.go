@@ -86,13 +86,14 @@ func ApplyEnv(m *manifest.Manifest, stagingDir string) string {
 	fmt.Fprintf(&b, "STAGING=%q\n", stagingDir)
 	fmt.Fprintf(&b, "ROUTING_PRESET=%q\n", m.Routing.Preset)
 	fmt.Fprintf(&b, "ROUTING_ADBLOCK=%d\n", btoi(m.Routing.AdBlock))
+	fmt.Fprintf(&b, "KERNEL_LOW_LATENCY=%d\n", btoi(m.Tuning.KernelLowLatency))
 
 	b.WriteString("\n# combos (0/1 flags)\n")
 	var (
-		enReality, enTLS, enHy2                                          = 0, 0, 0
-		hy2Port                                                          int
-		hy2Hop                                                           string
-		realitySrc, realitySNI, realityPub                              string
+		enReality, enTLS, enXHTTP, enHy2   = 0, 0, 0, 0
+		hy2Port                            int
+		hy2Hop                             string
+		realitySrc, realitySNI, realityPub string
 	)
 	if m.Reality != nil {
 		realitySrc = string(m.Reality.Source)
@@ -107,6 +108,8 @@ func ApplyEnv(m *manifest.Manifest, stagingDir string) string {
 			enReality = 1
 		case combo.TypeVLESSTLS:
 			enTLS = 1
+		case combo.TypeVLESSXHTTP:
+			enXHTTP = 1
 		case combo.TypeHysteria2:
 			enHy2 = 1
 			hy2Port = c.Port
@@ -115,6 +118,7 @@ func ApplyEnv(m *manifest.Manifest, stagingDir string) string {
 	}
 	fmt.Fprintf(&b, "ENABLE_VLESS_REALITY=%d\n", enReality)
 	fmt.Fprintf(&b, "ENABLE_VLESS_TLS=%d\n", enTLS)
+	fmt.Fprintf(&b, "ENABLE_VLESS_XHTTP=%d\n", enXHTTP)
 	fmt.Fprintf(&b, "ENABLE_HYSTERIA2=%d\n", enHy2)
 	if enHy2 == 1 {
 		fmt.Fprintf(&b, "HY2_PORT=%d\n", hy2Port)

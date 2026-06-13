@@ -17,7 +17,7 @@ import (
 const banner = `
 ┌─────────────────────────────────────────────┐
 │        Reality Deployer  —  向导             │
-│   VLESS+Vision+REALITY/TLS · Hysteria2      │
+│ VLESS REALITY/TLS/XHTTP · Hysteria2         │
 │   Angie (内置 ACME) · ufw · systemd         │
 └─────────────────────────────────────────────┘`
 
@@ -28,7 +28,7 @@ var pf *manifest.Manifest
 // Run 执行完整交互式向导：收集 → 校验 → 渲染 → 持久化 manifest。
 func Run() error {
 	fmt.Println(banner)
-	fmt.Println("\n本向导只渲染配置与 plan；实际改系统由 install.sh 完成。")
+	fmt.Println("\n本向导只渲染 staging/apply.env/manifest；实际改系统由 install.sh 完成。")
 
 	pf = nil
 	if manifest.Exists(paths.Manifest) {
@@ -59,18 +59,25 @@ func Run() error {
 		return err
 	}
 	// 3. 协议组合
-	hasReality, hasTLS, hasHy2 := askCombos()
+	hasReality, hasTLS, hasXHTTP, hasHy2 := askCombos()
 	// 443 仲裁
-	if hasReality && hasTLS {
-		fmt.Println("\n⚠  VLESS-REALITY 与 VLESS-TLS 都占用 443/tcp，不能并存。")
+	if count443(hasReality, hasTLS, hasXHTTP) > 1 {
+		fmt.Println("\n⚠  VLESS-REALITY / VLESS-TLS / VLESS-XHTTP 都占用 443/tcp，不能并存。")
 		keep := selectOpt("保留哪一个占 443？", []opt{
 			{"reality", "VLESS + Vision + REALITY（推荐）"},
 			{"tls", "VLESS + Vision + TLS（自有证书）"},
+			{"xhttp", "VLESS + XHTTP + TLS（较新客户端，XMUX-capable）"},
 		}, 0)
-		if keep == "reality" {
-			hasTLS = false
-		} else {
-			hasReality = false
+		hasReality = keep == "reality"
+		hasTLS = keep == "tls"
+		hasXHTTP = keep == "xhttp"
+	}
+	if hasXHTTP {
+		if !confirm("启用 XHTTP 需要较新的 Xray 客户端。确认继续？", true) {
+			hasXHTTP = false
+			if !hasReality && !hasTLS && !hasHy2 {
+				hasReality = true
+			}
 		}
 	}
 	// 4. 构造组合 specs（reconfigure 时尽量沿用旧 UUID/密钥）
@@ -84,6 +91,9 @@ func Run() error {
 		specs = append(specs, combo.Spec{
 			Type: combo.TypeVLESSTLS, UUID: keepUUID(combo.TypeVLESSTLS), Port: 443, Flow: "xtls-rprx-vision",
 		})
+	}
+	if hasXHTTP {
+		specs = append(specs, askXHTTP())
 	}
 	if hasHy2 {
 		specs = append(specs, askHysteria2())
@@ -99,11 +109,14 @@ func Run() error {
 	m.Combos = specs
 	// 6. 路由预设
 	m.Routing.Preset = selectOpt("\n路由预设", []opt{
-		{string(routing.PresetBlockCN), "屏蔽 CN 站点（geosite/geoip cn → block，默认）"},
-		{string(routing.PresetBypassCN), "CN 站点直连绕过（→ direct）"},
+		{string(routing.PresetBlockCNRU), "屏蔽 CN + RU 目标（默认，防泄露/投诉）"},
+		{string(routing.PresetBlockCN), "仅屏蔽 CN 目标"},
+		{string(routing.PresetBypassCNRU), "CN + RU 目标走 VPS direct 出口"},
+		{string(routing.PresetBypassCN), "仅 CN 目标走 VPS direct 出口"},
 		{string(routing.PresetNone), "不附加区域规则"},
 	}, routingDefaultIdx())
 	m.Routing.AdBlock = confirm("屏蔽广告域名 (geosite:category-ads-all)？", adblockDefault())
+	m.Tuning.KernelLowLatency = confirm("启用低延迟内核调优（fq/BBR/TFO，VPS 全局）？", tuningDefault())
 	// 7. SSH 端口
 	m.SSHPort = promptPort("SSH 端口（ufw 放行）", sshDefault())
 	// 8. 防火墙
@@ -159,10 +172,14 @@ func sshDefault() int {
 func routingDefaultIdx() int {
 	if pf != nil {
 		switch pf.Routing.Preset {
-		case string(routing.PresetBypassCN):
+		case string(routing.PresetBlockCN):
 			return 1
-		case string(routing.PresetNone):
+		case string(routing.PresetBypassCNRU):
 			return 2
+		case string(routing.PresetBypassCN):
+			return 3
+		case string(routing.PresetNone):
+			return 4
 		}
 	}
 	return 0
@@ -172,6 +189,12 @@ func adblockDefault() bool {
 		return pf.Routing.AdBlock
 	}
 	return false
+}
+func tuningDefault() bool {
+	if pf != nil {
+		return pf.Tuning.KernelLowLatency
+	}
+	return true
 }
 
 // comboDefaults 返回多选默认下标（来自既有 manifest）。
@@ -186,8 +209,10 @@ func comboDefaults() []int {
 			d = append(d, 0)
 		case combo.TypeVLESSTLS:
 			d = append(d, 1)
-		case combo.TypeHysteria2:
+		case combo.TypeVLESSXHTTP:
 			d = append(d, 2)
+		case combo.TypeHysteria2:
+			d = append(d, 3)
 		}
 	}
 	if len(d) == 0 {
@@ -197,11 +222,15 @@ func comboDefaults() []int {
 }
 
 func findPrevHy2() *combo.Spec {
+	return findPrev(combo.TypeHysteria2)
+}
+
+func findPrev(t string) *combo.Spec {
 	if pf == nil {
 		return nil
 	}
 	for i := range pf.Combos {
-		if pf.Combos[i].Type == combo.TypeHysteria2 {
+		if pf.Combos[i].Type == t {
 			return &pf.Combos[i]
 		}
 	}
@@ -253,10 +282,11 @@ func askEmail(m *manifest.Manifest) error {
 	}
 }
 
-func askCombos() (reality, tls, hy2 bool) {
+func askCombos() (reality, tls, xhttp, hy2 bool) {
 	idx := multiSelect("选择协议组合（可多选）", []opt{
 		{"reality", "VLESS + Vision + REALITY / TCP  [主力，推荐]"},
 		{"tls", "VLESS + Vision + TLS（自有 ACME 证书）"},
+		{"xhttp", "VLESS + XHTTP + TLS（较新客户端，XMUX-capable）"},
 		{"hysteria2", "Hysteria2（QUIC/UDP，备选）"},
 	}, comboDefaults())
 	for _, i := range idx {
@@ -266,14 +296,73 @@ func askCombos() (reality, tls, hy2 bool) {
 		case 1:
 			tls = true
 		case 2:
+			xhttp = true
+		case 3:
 			hy2 = true
 		}
 	}
-	if !reality && !tls && !hy2 {
+	if !reality && !tls && !xhttp && !hy2 {
 		fmt.Println("  未选任何组合，默认选 REALITY。")
 		reality = true
 	}
 	return
+}
+
+func count443(values ...bool) int {
+	var n int
+	for _, v := range values {
+		if v {
+			n++
+		}
+	}
+	return n
+}
+
+func askXHTTP() combo.Spec {
+	prev := findPrev(combo.TypeVLESSXHTTP)
+	path := "/rd-" + genPathToken(8)
+	mode := "auto"
+	if prev != nil {
+		if prev.XHTTPPath != "" {
+			path = prev.XHTTPPath
+		}
+		if prev.XHTTPMode != "" {
+			mode = prev.XHTTPMode
+		}
+	}
+	for {
+		path = promptDefault("XHTTP path（必须以 / 开头）", path)
+		if strings.HasPrefix(path, "/") && !strings.ContainsAny(path, " \t?#") {
+			break
+		}
+		fmt.Println("  path 必须以 / 开头，且不能含空白、? 或 #。")
+	}
+	mode = selectOpt("XHTTP mode", []opt{
+		{"auto", "auto（默认，客户端/服务端自动选择）"},
+		{"stream-up", "stream-up（H2/反代兼容性好）"},
+		{"packet-up", "packet-up（HTTP 中间盒兼容性强）"},
+		{"stream-one", "stream-one（单请求双向流）"},
+	}, xhttpModeDefaultIdx(mode))
+	return combo.Spec{
+		Type:      combo.TypeVLESSXHTTP,
+		UUID:      keepUUID(combo.TypeVLESSXHTTP),
+		Port:      443,
+		XHTTPPath: path,
+		XHTTPMode: mode,
+	}
+}
+
+func xhttpModeDefaultIdx(mode string) int {
+	switch mode {
+	case "stream-up":
+		return 1
+	case "packet-up":
+		return 2
+	case "stream-one":
+		return 3
+	default:
+		return 0
+	}
 }
 
 func askHysteria2() combo.Spec {
@@ -445,6 +534,8 @@ func printSummary(m *manifest.Manifest) {
 			fmt.Printf("  - VLESS + Vision + REALITY / TCP @ 443 (UUID %s)\n", c.UUID)
 		case combo.TypeVLESSTLS:
 			fmt.Printf("  - VLESS + Vision + TLS @ 443 (UUID %s)\n", c.UUID)
+		case combo.TypeVLESSXHTTP:
+			fmt.Printf("  - VLESS + XHTTP + TLS @ 443 (UUID %s, path %s, mode %s)\n", c.UUID, c.XHTTPPath, c.XHTTPMode)
 		case combo.TypeHysteria2:
 			extra := ""
 			if c.Hy2Obfs != "" {
@@ -464,6 +555,9 @@ func printSummary(m *manifest.Manifest) {
 		fmt.Print(" +adblock")
 	}
 	fmt.Println()
+	if m.Tuning.KernelLowLatency {
+		fmt.Println("内核调优:    fq/BBR/TFO")
+	}
 	fmt.Printf("SSH 端口:    %d\n", m.SSHPort)
 	fmt.Println("ufw 规则:")
 	for _, r := range m.Firewall.Rules {

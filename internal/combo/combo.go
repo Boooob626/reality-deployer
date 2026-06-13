@@ -13,6 +13,7 @@ import (
 const (
 	TypeVLESSReality = "vless_reality" // VLESS + Vision + REALITY/TCP（主力）
 	TypeVLESSTLS     = "vless_tls"     // VLESS + Vision + TLS（自有 ACME 证书）
+	TypeVLESSXHTTP   = "vless_xhttp"   // VLESS + XHTTP + TLS（XMUX-capable）
 	TypeHysteria2    = "hysteria2"
 )
 
@@ -23,9 +24,13 @@ type Spec struct {
 	Port int    `json:"port"`
 	Flow string `json:"flow,omitempty"` // xtls-rprx-vision
 
+	// XHTTP 专用
+	XHTTPPath string `json:"xhttp_path,omitempty"`
+	XHTTPMode string `json:"xhttp_mode,omitempty"` // auto / packet-up / stream-up / stream-one
+
 	// Hysteria2 专用
 	Hy2Password string `json:"hy2_password,omitempty"`
-	Hy2Obfs     string `json:"hy2_obfs,omitempty"`    // "salamander" 或空
+	Hy2Obfs     string `json:"hy2_obfs,omitempty"` // "salamander" 或空
 	Hy2ObfsPwd  string `json:"hy2_obfs_pwd,omitempty"`
 	Hy2UpMBps   int    `json:"hy2_up_mbps,omitempty"`
 	Hy2DownMBps int    `json:"hy2_down_mbps,omitempty"`
@@ -39,6 +44,7 @@ func sniffing() map[string]any {
 	return map[string]any{
 		"enabled":      true,
 		"destOverride": []string{"http", "tls", "quic"},
+		"routeOnly":    true,
 	}
 }
 
@@ -106,6 +112,56 @@ func VLESSTLS(s Spec, domain string) Inbound {
 	}
 }
 
+// VLESSXHTTP 生成 VLESS + XHTTP + TLS 入站。
+func VLESSXHTTP(s Spec, domain string) Inbound {
+	path := s.XHTTPPath
+	if path == "" {
+		path = "/xhttp"
+	}
+	mode := s.XHTTPMode
+	if mode == "" {
+		mode = "auto"
+	}
+	return map[string]any{
+		"tag":      "in-vless-xhttp",
+		"listen":   "0.0.0.0",
+		"port":     s.Port,
+		"protocol": "vless",
+		"settings": map[string]any{
+			"clients": []map[string]any{
+				{"id": s.UUID},
+			},
+			"decryption": "none",
+		},
+		"streamSettings": map[string]any{
+			"network":  "xhttp",
+			"security": "tls",
+			"tlsSettings": map[string]any{
+				"serverName": domain,
+				"minVersion": "1.2",
+				"alpn":       []string{"h2", "http/1.1"},
+				"certificates": []map[string]any{
+					{
+						"certificateFile": paths.DomainCert(domain),
+						"keyFile":         paths.DomainKey(domain),
+					},
+				},
+			},
+			"xhttpSettings": map[string]any{
+				"host": domain,
+				"path": path,
+				"mode": mode,
+				"extra": map[string]any{
+					"xPaddingBytes":        "100-1000",
+					"scMaxBufferedPosts":   30,
+					"scStreamUpServerSecs": "20-80",
+				},
+			},
+		},
+		"sniffing": sniffing(),
+	}
+}
+
 // Hysteria2 生成 Hysteria2 入站（QUIC/UDP，自签证书）。
 // 结构依据 XTLS/Xray-core PR #5679 的权威示例：
 //   - protocol = "hysteria"（version:2 写在 settings 与 hysteriaSettings）
@@ -159,6 +215,8 @@ func InboundFor(s Spec, rt *reality.Target, domain string) (Inbound, error) {
 		return VLESSReality(s, rt)
 	case TypeVLESSTLS:
 		return VLESSTLS(s, domain), nil
+	case TypeVLESSXHTTP:
+		return VLESSXHTTP(s, domain), nil
 	case TypeHysteria2:
 		return Hysteria2(s), nil
 	default:

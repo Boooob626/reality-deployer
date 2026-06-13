@@ -3,20 +3,21 @@ package routing
 import "testing"
 
 func TestBuildBlockCNEmitsBlockRules(t *testing.T) {
-	_, rules := Build(PresetBlockCN, false)
-	var hasPrivateDirect, hasCNBlock bool
+	strategy, rules := Build(PresetBlockCN, false)
+	if strategy != "AsIs" {
+		t.Fatalf("domainStrategy=%s, want AsIs", strategy)
+	}
+	var hasPrivateBlock, hasBTBlock, hasCNBlock bool
 	for _, r := range rules {
 		tags, _ := r["outboundTag"].(string)
-		if tags == "direct" {
+		if tags == "block" {
 			if ips, ok := r["ip"].([]string); ok {
 				for _, ip := range ips {
 					if ip == "geoip:private" {
-						hasPrivateDirect = true
+						hasPrivateBlock = true
 					}
 				}
 			}
-		}
-		if tags == "block" {
 			if doms, ok := r["domain"].([]string); ok {
 				for _, d := range doms {
 					if d == "geosite:cn" {
@@ -24,13 +25,50 @@ func TestBuildBlockCNEmitsBlockRules(t *testing.T) {
 					}
 				}
 			}
+			if protos, ok := r["protocol"].([]string); ok {
+				for _, p := range protos {
+					if p == "bittorrent" {
+						hasBTBlock = true
+					}
+				}
+			}
 		}
 	}
-	if !hasPrivateDirect {
-		t.Error("缺少 geoip:private → direct")
+	if !hasPrivateBlock {
+		t.Error("缺少 geoip:private → block")
+	}
+	if !hasBTBlock {
+		t.Error("缺少 bittorrent → block")
 	}
 	if !hasCNBlock {
 		t.Error("缺少 geosite:cn → block")
+	}
+}
+
+func TestBuildBlockCNRUBlocksRU(t *testing.T) {
+	_, rules := Build(PresetBlockCNRU, false)
+	var hasRUDomain, hasRUIP bool
+	for _, r := range rules {
+		if r["outboundTag"] != "block" {
+			continue
+		}
+		if doms, ok := r["domain"].([]string); ok {
+			for _, d := range doms {
+				if d == "domain:ru" {
+					hasRUDomain = true
+				}
+			}
+		}
+		if ips, ok := r["ip"].([]string); ok {
+			for _, ip := range ips {
+				if ip == "geoip:ru" {
+					hasRUIP = true
+				}
+			}
+		}
+	}
+	if !hasRUDomain || !hasRUIP {
+		t.Fatalf("block_cn_ru 缺少 RU domain/ip 规则: domain=%v ip=%v", hasRUDomain, hasRUIP)
 	}
 }
 

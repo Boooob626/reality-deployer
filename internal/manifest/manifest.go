@@ -17,17 +17,18 @@ const SchemaVersion = "reality-deployer/v1"
 
 // Manifest 是部署的唯一事实来源。
 type Manifest struct {
-	Schema   string          `json:"schema"`
-	Created  time.Time       `json:"created"`
-	Updated  time.Time       `json:"updated"`
-	Domain   string          `json:"domain"`
-	Email    string          `json:"email"`
-	PublicIP string          `json:"public_ip"`
-	SSHPort  int             `json:"ssh_port"`
+	Schema   string    `json:"schema"`
+	Created  time.Time `json:"created"`
+	Updated  time.Time `json:"updated"`
+	Domain   string    `json:"domain"`
+	Email    string    `json:"email"`
+	PublicIP string    `json:"public_ip"`
+	SSHPort  int       `json:"ssh_port"`
 
 	Combos   []combo.Spec    `json:"combos"`
 	Reality  *reality.Target `json:"reality,omitempty"`
 	Routing  Routing         `json:"routing"`
+	Tuning   Tuning          `json:"tuning,omitempty"`
 	Firewall Firewall        `json:"firewall"`
 }
 
@@ -35,6 +36,11 @@ type Manifest struct {
 type Routing struct {
 	Preset  string `json:"preset"`
 	AdBlock bool   `json:"ad_block"`
+}
+
+// Tuning 描述 VPS 侧轻量性能调优。
+type Tuning struct {
+	KernelLowLatency bool `json:"kernel_low_latency,omitempty"`
 }
 
 // Firewall 描述 ufw 规则集。
@@ -60,7 +66,7 @@ func New() *Manifest {
 		Created: now,
 		Updated: now,
 		SSHPort: 22,
-		Routing: Routing{Preset: "block_cn"},
+		Routing: Routing{Preset: "block_cn_ru"},
 	}
 }
 
@@ -74,7 +80,7 @@ func BuildFirewall(combos []combo.Spec, sshPort int) Firewall {
 	need443 := false
 	for _, c := range combos {
 		switch c.Type {
-		case combo.TypeVLESSReality, combo.TypeVLESSTLS:
+		case combo.TypeVLESSReality, combo.TypeVLESSTLS, combo.TypeVLESSXHTTP:
 			need443 = true
 		case combo.TypeHysteria2:
 			fw.Rules = append(fw.Rules, UFWRule{Action: "allow", Proto: "udp", Port: c.Port, Note: "hysteria2"})

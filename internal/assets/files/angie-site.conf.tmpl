@@ -20,7 +20,7 @@ server {
     }
 }
 
-# :8443（仅回环）—— 真站点：服务 REALITY 回源 / 直连访客
+# :8443（仅回环）—— 真站点：服务 REALITY own_domain 回源
 server {
     listen 127.0.0.1:8443 ssl;
     http2 on;

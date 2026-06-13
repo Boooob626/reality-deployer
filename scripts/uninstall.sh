@@ -39,6 +39,10 @@ remove_file "$ANGIE_DIR/$DOMAIN.conf"
 remove_file /etc/systemd/system/xray.service
 remove_file /usr/local/etc/xray/hy2.crt
 remove_file /usr/local/etc/xray/hy2.key
+if [ "${KERNEL_LOW_LATENCY:-0}" = "1" ]; then
+  remove_file /etc/sysctl.d/99-reality-deployer.conf
+  sysctl --system >/dev/null 2>&1 || true
+fi
 [ -d "/var/www/$DOMAIN" ] && rm -rf "/var/www/$DOMAIN" && log "已移除 /var/www/$DOMAIN"
 
 systemctl daemon-reload

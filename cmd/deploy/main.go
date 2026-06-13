@@ -122,6 +122,9 @@ func status() error {
 		fmt.Print(" +adblock")
 	}
 	fmt.Println()
+	if m.Tuning.KernelLowLatency {
+		fmt.Println("内核调优:  fq/BBR/TFO")
+	}
 	if m.Reality != nil {
 		fmt.Printf("REALITY:   source=%s target=%s sni=%v\n", m.Reality.Source, m.Reality.Target, m.Reality.ServerNames)
 	}
@@ -132,6 +135,8 @@ func status() error {
 			fmt.Printf("  - VLESS+Vision+REALITY @ 443/tcp (uuid %s)\n", c.UUID)
 		case combo.TypeVLESSTLS:
 			fmt.Printf("  - VLESS+Vision+TLS @ 443/tcp (uuid %s)\n", c.UUID)
+		case combo.TypeVLESSXHTTP:
+			fmt.Printf("  - VLESS+XHTTP+TLS @ 443/tcp (uuid %s, path %s, mode %s)\n", c.UUID, c.XHTTPPath, c.XHTTPMode)
 		case combo.TypeHysteria2:
 			fmt.Printf("  - Hysteria2 @ %d/udp\n", c.Port)
 		}

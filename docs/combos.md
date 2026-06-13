@@ -1,6 +1,6 @@
 # 协议组合
 
-向导支持以下三种组合，可**多选并存**（各自独立入站/端口）。
+向导支持以下组合，可**多选并存**（各自独立入站/端口；443/tcp 组合会仲裁）。
 
 ## 1. VLESS + Vision + REALITY / TCP（主力）
 
@@ -18,7 +18,16 @@
 - 仍用 Vision flow + raw TCP。
 - 适用：REALITY 被针对时的备选；优点是真证书、缺点是需自有域名 + 端口 443 与 REALITY 组合互斥（向导会提示择一占用 443）。
 
-## 3. Hysteria2
+## 3. VLESS + XHTTP + TLS（新客户端低延迟选项）
+
+- 不走 Vision flow；使用 `network:"xhttp"` + Angie ACME 证书。
+- XHTTP 服务端默认监听 TCP 443 的 H1/H2，`mode:"auto"`；需要兼容中间盒时可在向导里切到 `packet-up`，需要流式上行时可切 `stream-up`。
+- `xhttpSettings.extra` 内置 `xPaddingBytes:"100-1000"`、`scMaxBufferedPosts:30`、`scStreamUpServerSecs:"20-80"`，用于减少固定 header 长度特征并保持 stream-up 长连接活性。
+- 导出的 `vless://` 链接会带一个轻量 XMUX `extra`：`maxConcurrency:"16-32"`、`hMaxRequestTimes:"600-900"`、`hMaxReusableSecs:"1800-3000"`。这是客户端侧复用控制，不是经典 `mux.cool`。
+- 使用 XHTTP 时不要再启用客户端的 `mux.cool`；官方 XHTTP 文档也建议让 XMUX 接管 H2/H3 复用。
+- 适用：客户端足够新、想要 HTTP 传输层伪装/复用能力；代价是兼容面比 REALITY/Vision 更依赖客户端实现。
+
+## 4. Hysteria2
 
 - QUIC/UDP，独立端口；入站结构依据 Xray PR #5679：`protocol:"hysteria"` + `version:2`、`network:"hysteria"`、salamander 在 `streamSettings.finalmask.udp`、`alpn:["h3"]`。
 - 可选 Salamander obfs（`finalmask.udp[].type=salamander`）。
@@ -28,13 +37,19 @@
 
 ## 路由预设（所有组合共享）
 
-- `block_cn`（默认）：`geosite:cn` + `geoip:cn` → `block`。
+- `block_cn_ru`（默认）：`geosite:cn` + `domain:ru` + `geoip:cn` + `geoip:ru` → `block`。
+- `block_cn`：`geosite:cn` + `geoip:cn` → `block`。
+- `bypass_cn_ru`：CN/RU 目标 → `direct`（走 VPS 自身出口）。
 - `bypass_cn`：上述 → `direct`（不走代理）。
 - `none`：不附加区域规则。
-- 私网 `geosite:private` → `direct`（始终）；可选 `geosite:category-ads-all` → `block`。
+- 私网 `geoip:private` → `block`（始终），避免 VPS 被当内网跳板或云元数据探针。
+- 明文 BitTorrent `protocol:["bittorrent"]` → `block`（始终），降低出口投诉和滥用风险。
+- 入站 sniffing 使用 `routeOnly:true`，路由 `domainStrategy:"AsIs"`，可按域名/IP 分流但不额外发起 DNS 解析。
+- 可选 `geosite:category-ads-all` → `block`。
 
 ## 443 端口仲裁
 
-VLESS-REALITY 与 VLESS-TLS 都要 443，不能并存于同一 443。向导逻辑：
-- 若两者都选 → 提示，默认 REALITY 占 443，VLESS-TLS 让位或改用 REALITY 内部回源。
-- 推荐组合：**REALITY(443/tcp) + Hysteria2(udp)**。
+VLESS-REALITY、VLESS-TLS 与 VLESS-XHTTP 都要 443/tcp，不能并存于同一 443。向导逻辑：
+- 若多个 443 组合都选 → 提示择一，默认 REALITY 占 443。
+- 推荐保守组合：**REALITY(443/tcp) + Hysteria2(udp)**。
+- 想尝试新传输层时，用 **XHTTP(443/tcp) + Hysteria2(udp)**，并确认客户端支持 XHTTP/XMUX。

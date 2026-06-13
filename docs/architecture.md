@@ -30,7 +30,7 @@
 ## 3. 端口与流量拓扑
 
 ```
-            443/tcp ──► Xray (REALITY / VLESS-TLS, Vision flow)
+            443/tcp ──► Xray (REALITY / VLESS-TLS / VLESS-XHTTP)
                             │ target / fallback
                             ▼
             127.0.0.1:8443 ──► Angie (真站点 + ACME 真证书)
@@ -38,9 +38,10 @@
             <udp>/   ──► Xray Hysteria2（若选）
 ```
 
-- 443 归 Xray：非代理流量回源到 Angie，浏览器访问域名看到带真证书的真站点。
+- 443 归 Xray：REALITY、VLESS-TLS、VLESS-XHTTP 三者择一占用；REALITY 的 `own_domain` 源回到 Angie，浏览器访问域名看到带真证书的真站点。
 - 80 归 Angie：HTTP-01 挑战 + 跳转。
-- Angie 的 ACME 证书同时供 Xray VLESS-TLS 组合与自身使用。
+- Angie 的 ACME 证书同时供 Xray VLESS-TLS / VLESS-XHTTP 组合与自身使用。
+- 若启用低延迟调优，安装层会写 `/etc/sysctl.d/99-reality-deployer.conf`，只包含 fq、BBR（内核支持时）与 TCP Fast Open；卸载时回收。
 
 ## 4. 幂等与可逆
 

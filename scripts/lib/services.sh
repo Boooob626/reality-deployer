@@ -43,7 +43,7 @@ gen_hy2_cert() {
   ok "Hysteria2 证书已生成"
 }
 
-# VLESS-TLS 证书置备。
+# 域名 TLS 证书置备（VLESS-TLS / VLESS-XHTTP 共用）。
 # Angie ACME 证书默认位于 acme_client_path/<client>/{certificate.pem,private.key}。
 # Xray 需要稳定文件路径，因此复制一份到 /etc/angie/acme/<domain>.*。
 provision_tls_cert() {
@@ -53,7 +53,7 @@ provision_tls_cert() {
   key="/etc/angie/acme/$domain.key"
   mkdir -p /etc/angie/acme
   if [ -f "$cert" ] && [ -f "$key" ]; then
-    ok "VLESS-TLS 证书已就绪（$cert）"; return 0
+    ok "域名 TLS 证书已就绪（$cert）"; return 0
   fi
 
   wait_until=$((SECONDS + ${TLS_WAIT_SECONDS:-120}))
@@ -66,7 +66,7 @@ provision_tls_cert() {
       if [ -f "$src_dir/certificate.pem" ] && [ -f "$src_dir/private.key" ]; then
         install -m 0644 "$src_dir/certificate.pem" "$cert"
         install -m 0600 "$src_dir/private.key" "$key"
-        ok "VLESS-TLS 证书已导出（$cert）"
+        ok "域名 TLS 证书已导出（$cert）"
         return 0
       fi
     done
@@ -74,7 +74,7 @@ provision_tls_cert() {
     sleep 2
   done
 
-  warn "VLESS-TLS 需要证书文件：$cert 与 $key"
+  warn "TLS 入站需要证书文件：$cert 与 $key"
   warn "未在 Angie ACME 存储中找到 $client/certificate.pem 与 private.key。"
   return 1
 }

@@ -66,14 +66,55 @@ func TestXrayRenderProducesValidJSON(t *testing.T) {
 	if rs["privateKey"] == "" || rs["privateKey"] == nil {
 		t.Error("reality privateKey 缺失")
 	}
+	sniff, _ := first["sniffing"].(map[string]any)
+	if sniff["routeOnly"] != true {
+		t.Errorf("sniffing.routeOnly 应启用，got %v", sniff["routeOnly"])
+	}
 
 	// routing 含 CN 屏蔽
 	if !strings.Contains(string(b), "geosite:cn") {
 		t.Error("缺 geosite:cn 路由规则")
 	}
+	if !strings.Contains(string(b), `"domainStrategy": "AsIs"`) {
+		t.Error("routing 应使用 AsIs 避免额外 DNS 解析")
+	}
+	if !strings.Contains(string(b), `"policy"`) || !strings.Contains(string(b), `"uplinkOnly": 0`) {
+		t.Error("缺少隐私/低延迟 policy")
+	}
 	// outbounds 含 direct + block
 	if !strings.Contains(string(b), `"tag": "direct"`) || !strings.Contains(string(b), `"tag": "block"`) {
 		t.Error("缺少 direct/block 出站")
+	}
+}
+
+func TestVLESSXHTTPInboundSchema(t *testing.T) {
+	m := &manifest.Manifest{
+		Domain: "example.com", Email: "a@example.com", SSHPort: 22,
+		Combos: []combo.Spec{
+			{Type: combo.TypeVLESSXHTTP, UUID: "uuid-x", Port: 443, XHTTPPath: "/rd-test", XHTTPMode: "auto"},
+		},
+		Routing: manifest.Routing{Preset: "block_cn_ru"},
+	}
+	b, err := Xray(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("非合法 JSON: %v", err)
+	}
+	in := cfg["inbounds"].([]any)[0].(map[string]any)
+	ss, _ := in["streamSettings"].(map[string]any)
+	if ss["network"] != "xhttp" || ss["security"] != "tls" {
+		t.Fatalf("xhttp streamSettings 异常: %+v", ss)
+	}
+	xs, _ := ss["xhttpSettings"].(map[string]any)
+	if xs["path"] != "/rd-test" || xs["mode"] != "auto" {
+		t.Fatalf("xhttpSettings 异常: %+v", xs)
+	}
+	extra, _ := xs["extra"].(map[string]any)
+	if extra["scStreamUpServerSecs"] != "20-80" {
+		t.Fatalf("xhttp extra 缺少 stream-up 保活: %+v", extra)
 	}
 }
 
@@ -138,9 +179,10 @@ func TestApplyEnvContainsDomainAndCombos(t *testing.T) {
 			{Type: combo.TypeHysteria2, Port: 36712, Hy2Password: "p"},
 		},
 		Reality: rt,
+		Tuning:  manifest.Tuning{KernelLowLatency: true},
 	}
 	env := ApplyEnv(m, "/tmp/staging")
-	for _, want := range []string{"DOMAIN=\"example.com\"", "ENABLE_VLESS_REALITY=1", "ENABLE_HYSTERIA2=1", "HY2_PORT=36712", "REALITY_SOURCE=\"own_domain\""} {
+	for _, want := range []string{"DOMAIN=\"example.com\"", "ENABLE_VLESS_REALITY=1", "ENABLE_VLESS_XHTTP=0", "ENABLE_HYSTERIA2=1", "HY2_PORT=36712", "REALITY_SOURCE=\"own_domain\"", "KERNEL_LOW_LATENCY=1"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("apply.env 缺少 %q\n%s", want, env)
 		}

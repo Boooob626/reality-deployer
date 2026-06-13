@@ -24,12 +24,13 @@ STAGING="${STAGING:-$MANIFEST_DIR/staging}"
 : "${SSH_PORT:?apply.env 缺少 SSH_PORT}"
 
 log "域名=$DOMAIN  公网IP=${PUBLIC_IP:-未知}"
-log "组合: vless-reality=${ENABLE_VLESS_REALITY:-0} vless-tls=${ENABLE_VLESS_TLS:-0} hysteria2=${ENABLE_HYSTERIA2:-0}"
+log "组合: vless-reality=${ENABLE_VLESS_REALITY:-0} vless-tls=${ENABLE_VLESS_TLS:-0} vless-xhttp=${ENABLE_VLESS_XHTTP:-0} hysteria2=${ENABLE_HYSTERIA2:-0}"
 
 # 1) 基础包 + Xray + Angie
 pkg_ensure curl ca-certificates openssl ufw
 install_xray
 install_angie
+apply_perf_tuning
 
 # 2) 落位配置文件
 ANGIE_DIR="$(angie_conf_dir)"
@@ -61,8 +62,8 @@ hy2hop_apply
 systemctl daemon-reload
 svc_enable_restart angie
 wait_angie_ready
-if [ "${ENABLE_VLESS_TLS:-0}" = "1" ]; then
-  provision_tls_cert "$DOMAIN" || die "VLESS-TLS 证书未就绪，无法启动 Xray。请检查 Angie ACME 日志与 80/tcp/DNS 后重试 apply。"
+if [ "${ENABLE_VLESS_TLS:-0}" = "1" ] || [ "${ENABLE_VLESS_XHTTP:-0}" = "1" ]; then
+  provision_tls_cert "$DOMAIN" || die "域名 TLS 证书未就绪，无法启动 Xray。请检查 Angie ACME 日志与 80/tcp/DNS 后重试 apply。"
 fi
 svc_enable_restart xray
 

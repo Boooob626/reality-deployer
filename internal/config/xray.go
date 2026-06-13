@@ -28,6 +28,25 @@ func Xray(m *manifest.Manifest) ([]byte, error) {
 			"loglevel": "warning",
 		},
 		"inbounds": inbounds,
+		"policy": map[string]any{
+			"levels": map[string]any{
+				"0": map[string]any{
+					"handshake":         4,
+					"connIdle":          300,
+					"uplinkOnly":        0,
+					"downlinkOnly":      0,
+					"statsUserUplink":   false,
+					"statsUserDownlink": false,
+					"statsUserOnline":   false,
+				},
+			},
+			"system": map[string]any{
+				"statsInboundUplink":    false,
+				"statsInboundDownlink":  false,
+				"statsOutboundUplink":   false,
+				"statsOutboundDownlink": false,
+			},
+		},
 		"outbounds": []map[string]any{
 			{
 				"tag":      "direct",
@@ -35,9 +54,9 @@ func Xray(m *manifest.Manifest) ([]byte, error) {
 				"settings": map[string]any{"domainStrategy": "AsIs"},
 			},
 			{
-				"tag":       "block",
-				"protocol":  "blackhole",
-				"settings":  map[string]any{"response": map[string]any{"type": "http"}},
+				"tag":      "block",
+				"protocol": "blackhole",
+				"settings": map[string]any{"response": map[string]any{"type": "http"}},
 			},
 		},
 		"routing": map[string]any{
