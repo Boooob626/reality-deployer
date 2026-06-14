@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reality Deployer —— 一键安装（curl 方式）。
-# 从 GitHub Release 下载预编译 tarball（含二进制 + scripts/ + deploy.sh），解压即用。
-# VPS 上不编译、不需要 make / Go 工具链。
+# 优先下载 GitHub Release 预编译 tarball；若没有 Release，自动从 main 源码构建。
+# Release 路径不需要 Go；源码 fallback 会临时下载 Go >=1.20（不落盘到系统目录）。
 #
 #   curl -fsSL https://raw.githubusercontent.com/Boooob626/reality-deployer/main/install.sh | sudo bash
 #
@@ -10,6 +10,8 @@ set -euo pipefail
 
 REPO="Boooob626/reality-deployer"
 DEST="${DEST:-/opt/reality-deployer}"
+REF="${RD_REF:-main}"
+GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-}"
 
 _rd_die() { printf '\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 _rd_log() { printf '\033[34m»\033[0m %s\n' "$*" >&2; }
@@ -24,13 +26,18 @@ case "$DEST" in
     ;;
 esac
 
+install_pkgs() {
+  [ "$#" -eq 0 ] && return 0
+  command -v apt-get >/dev/null 2>&1 || _rd_die "仅支持 Debian/Ubuntu VPS（需要 apt-get）。"
+  apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
 missing=()
 command -v curl >/dev/null 2>&1 || missing+=(curl)
 command -v tar  >/dev/null 2>&1 || missing+=(tar)
-if [ "${#missing[@]}" -gt 0 ]; then
-  apt-get update -qq
-  apt-get install -y "${missing[@]}"
-fi
+[ -f /etc/ssl/certs/ca-certificates.crt ] || missing+=(ca-certificates)
+install_pkgs "${missing[@]}"
 
 # 架构 → asset 名
 case "$(uname -m)" in
@@ -42,23 +49,96 @@ ASSET="reality-deployer-linux-${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-_rd_log "下载 $URL …"
-
-# 下载：curl（公开仓库直连；私有仓库可设 GH_TOKEN）；失败回退 gh
 curl_args=(-fsSL)
 [ -n "${GH_TOKEN:-}" ] && curl_args+=(-H "Authorization: token $GH_TOKEN")
-if ! curl "${curl_args[@]}" -o "$TMP/$ASSET" "$URL"; then
-  if command -v gh >/dev/null 2>&1; then
-    _rd_log "curl 失败，改用 gh release download …"
-    gh release download -R "$REPO" -p "$ASSET" -D "$TMP" || _rd_die "下载失败（检查网络 / 仓库可访问性）"
-  else
-    _rd_die "下载失败（公开仓库应可直接 curl；私有仓库请 export GH_TOKEN=<PAT> 或安装 gh 并 gh auth login）"
+
+download() {
+  local url="$1" out="$2"
+  curl "${curl_args[@]}" -o "$out" "$url"
+}
+
+install_payload() {
+  _rd_log "解压到 $DEST …"
+  rm -rf "$DEST"; mkdir -p "$DEST"
+  tar -xzf "$1" -C "$DEST"
+  chmod +x "$DEST/reality-deployer" "$DEST/deploy.sh" 2>/dev/null || true
+}
+
+go_version_ok() {
+  command -v go >/dev/null 2>&1 || return 1
+  local parsed major minor
+  parsed="$(go version 2>/dev/null | sed -nE 's/.* go([0-9]+)\.([0-9]+).*/\1 \2/p')"
+  [ -n "$parsed" ] || return 1
+  # shellcheck disable=SC2086
+  set -- $parsed
+  major="$1"; minor="$2"
+  [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -ge 20 ]; }
+}
+
+ensure_go() {
+  if go_version_ok; then
+    _rd_log "使用 $(go version)"
+    return 0
+  fi
+
+  local gov="$GO_BOOTSTRAP_VERSION"
+  if [ -z "$gov" ]; then
+    gov="$(curl "${curl_args[@]}" "https://go.dev/VERSION?m=text" 2>/dev/null \
+      | sed -nE 's/^go([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/p' \
+      | head -n1 || true)"
+  fi
+  [ -n "$gov" ] || gov="1.22.12"
+
+  local go_url="https://go.dev/dl/go${gov}.linux-${ARCH}.tar.gz"
+  _rd_log "未发现 Go >=1.20，下载临时 Go ${gov} 用于构建 …"
+  download "$go_url" "$TMP/go.tar.gz" || _rd_die "下载 Go 失败：$go_url"
+  tar -xzf "$TMP/go.tar.gz" -C "$TMP"
+  export PATH="$TMP/go/bin:$PATH"
+  go_version_ok || _rd_die "临时 Go 不可用：$(go version 2>/dev/null || true)"
+}
+
+install_from_source() {
+  local src_url="${RD_SOURCE_URL:-https://github.com/${REPO}/archive/refs/heads/${REF}.tar.gz}"
+  _rd_log "Release asset 不可用，改从源码构建：$src_url"
+  download "$src_url" "$TMP/source.tar.gz" || _rd_die "下载源码失败：$src_url"
+  mkdir -p "$TMP/src"
+  tar -xzf "$TMP/source.tar.gz" -C "$TMP/src" --strip-components=1
+
+  ensure_go
+  _rd_log "构建 reality-deployer (${ARCH}) …"
+  (cd "$TMP/src" && CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -trimpath -ldflags="-s -w" -o "$TMP/reality-deployer" ./cmd/deploy) \
+    || _rd_die "源码构建失败"
+
+  _rd_log "安装到 $DEST …"
+  rm -rf "$DEST"; mkdir -p "$DEST"
+  install -m 0755 "$TMP/reality-deployer" "$DEST/reality-deployer"
+  install -m 0755 "$TMP/src/deploy.sh" "$TMP/src/install.sh" "$DEST/"
+  cp -R "$TMP/src/scripts" "$DEST/scripts"
+  chmod +x "$DEST/scripts/install.sh" "$DEST/scripts/uninstall.sh" 2>/dev/null || true
+}
+
+installed=0
+if [ "${RD_INSTALL_FROM_SOURCE:-0}" != "1" ]; then
+  _rd_log "下载 $URL …"
+  if download "$URL" "$TMP/$ASSET"; then
+    install_payload "$TMP/$ASSET"
+    installed=1
+  elif command -v gh >/dev/null 2>&1; then
+    _rd_log "Release curl 失败，改用 gh release download …"
+    if gh release download -R "$REPO" -p "$ASSET" -D "$TMP"; then
+      install_payload "$TMP/$ASSET"
+      installed=1
+    fi
   fi
 fi
 
-_rd_log "解压到 $DEST …"
-rm -rf "$DEST"; mkdir -p "$DEST"
-tar -xzf "$TMP/$ASSET" -C "$DEST"
+if [ "$installed" -ne 1 ]; then
+  if command -v gh >/dev/null 2>&1; then
+    _rd_log "没有可用 Release asset，继续使用源码 fallback。"
+  fi
+  install_from_source
+fi
+
 chmod +x "$DEST/reality-deployer" "$DEST/deploy.sh" 2>/dev/null || true
 
 cd "$DEST"
