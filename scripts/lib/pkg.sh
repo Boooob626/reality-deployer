@@ -6,6 +6,17 @@ apt_refresh() {
   apt-get update -qq
 }
 
+angie_repo_base() {
+  [ -n "${DISTRO_ID:-}" ] || die "发行版 ID 未检测，请先调用 detect_distro"
+  [ -n "${DISTRO_VERSION_ID:-}" ] || die "发行版版本未检测，无法配置 Angie 仓库"
+  printf 'https://download.angie.software/angie/%s/%s' "$DISTRO_ID" "$DISTRO_VERSION_ID"
+}
+
+angie_repo_release_url() {
+  local base="$1" suite="$2"
+  printf '%s/dists/%s/Release' "$base" "$suite"
+}
+
 # 安装 Xray-core（幂等）。
 install_xray() {
   if command -v xray >/dev/null 2>&1 && xray version >/dev/null 2>&1; then
@@ -40,7 +51,14 @@ install_angie() {
   mkdir -p "$(dirname "$keyring")"
   curl -fsSL https://angie.software/keys/angie-signing.gpg \
     | gpg --dearmor --yes -o "$keyring" || die "下载 Angie 签名密钥失败"
-  echo "deb [signed-by=$keyring] https://download.angie.software/angie/$DISTRO_ID $DISTRO_CODENAME main" \
+  local repo_base release_url
+  repo_base="$(angie_repo_base)"
+  release_url="$(angie_repo_release_url "$repo_base" "$DISTRO_CODENAME")"
+  if ! curl -fsI "$release_url" >/dev/null 2>&1; then
+    die "Angie 仓库不支持当前发行版：$DISTRO_ID $DISTRO_VERSION_ID ($DISTRO_CODENAME)。缺少 $release_url"
+  fi
+  rm -f /etc/apt/sources.list.d/angie.list /etc/apt/sources.list.d/angie.sources
+  echo "deb [signed-by=$keyring] $repo_base $DISTRO_CODENAME main" \
     > /etc/apt/sources.list.d/angie.list
   apt_refresh
   apt-get install -y angie || die "Angie 安装失败"

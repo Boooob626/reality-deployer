@@ -87,6 +87,10 @@ ufw status verbose                                    # 仅 22/80/443/hy2-udp
 curl -vk https://<domain>/                            # REALITY own_domain 时返回 decoy 站点 + 有效证书
 ```
 
+## Troubleshooting
+
+- `download.angie.software ... trixie Release`: update to latest `main` and rerun the one-liner. The installer uses Angie's versioned repo path, e.g. Debian 13 writes `/angie/debian/13 trixie main`.
+
 ## 目录结构
 
 ```

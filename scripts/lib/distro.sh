@@ -6,6 +6,7 @@ detect_distro() {
   . /etc/os-release
   DISTRO_ID="${ID:-}"
   DISTRO_CODENAME="${VERSION_CODENAME:-}"
+  DISTRO_VERSION_ID="${VERSION_ID:-}"
   case "$DISTRO_ID" in
     debian|ubuntu) ;;
     *) die "仅支持 Debian/Ubuntu，当前: ${DISTRO_ID:-未知}（${PRETTY_NAME:-}）" ;;
