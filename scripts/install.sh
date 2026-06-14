@@ -11,6 +11,7 @@ done
 
 require_root
 detect_distro
+cleanup_legacy_angie_repo
 
 MANIFEST_DIR="${MANIFEST_DIR:-/var/lib/reality-deployer}"
 APPLY_ENV="$MANIFEST_DIR/apply.env"

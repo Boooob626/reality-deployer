@@ -6,6 +6,16 @@ apt_refresh() {
   apt-get update -qq
 }
 
+cleanup_legacy_angie_repo() {
+  for f in /etc/apt/sources.list.d/angie.list /etc/apt/sources.list.d/angie.sources; do
+    [ -f "$f" ] || continue
+    if grep -Eq 'download\.angie\.software/angie/(debian|ubuntu)([[:space:]]|$)' "$f"; then
+      warn "移除旧 Angie apt 源：$f"
+      rm -f "$f"
+    fi
+  done
+}
+
 angie_repo_base() {
   [ -n "${DISTRO_ID:-}" ] || die "发行版 ID 未检测，请先调用 detect_distro"
   [ -n "${DISTRO_VERSION_ID:-}" ] || die "发行版版本未检测，无法配置 Angie 仓库"
@@ -46,6 +56,7 @@ install_angie() {
     return 0
   fi
   log "安装 Angie（官方仓库）…"
+  cleanup_legacy_angie_repo
   pkg_ensure ca-certificates curl gnupg
   local keyring=/usr/share/keyrings/angie-signing.gpg
   mkdir -p "$(dirname "$keyring")"

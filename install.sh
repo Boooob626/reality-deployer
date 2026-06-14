@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reality Deployer —— 一键安装（curl 方式）。
-# 优先下载 GitHub Release 预编译 tarball；若没有 Release，自动从 main 源码构建。
-# Release 路径不需要 Go；源码 fallback 会临时下载 Go >=1.20（不落盘到系统目录）。
+# 默认从 main 源码构建，确保 raw.githubusercontent.com/main/install.sh 总是安装当前 main。
+# 可用 RD_USE_RELEASE=1 改走 GitHub Release 预编译 tarball；源码构建会临时下载 Go >=1.20。
 #
 #   curl -fsSL https://raw.githubusercontent.com/Boooob626/reality-deployer/main/install.sh | sudo bash
 #
@@ -26,12 +26,24 @@ case "$DEST" in
     ;;
 esac
 
+cleanup_legacy_angie_repo() {
+  for f in /etc/apt/sources.list.d/angie.list /etc/apt/sources.list.d/angie.sources; do
+    [ -f "$f" ] || continue
+    if grep -Eq 'download\.angie\.software/angie/(debian|ubuntu)([[:space:]]|$)' "$f"; then
+      _rd_log "移除旧 Angie apt 源：$f"
+      rm -f "$f"
+    fi
+  done
+}
+
 install_pkgs() {
   [ "$#" -eq 0 ] && return 0
   command -v apt-get >/dev/null 2>&1 || _rd_die "仅支持 Debian/Ubuntu VPS（需要 apt-get）。"
   apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
 }
+
+cleanup_legacy_angie_repo
 
 missing=()
 command -v curl >/dev/null 2>&1 || missing+=(curl)
@@ -118,7 +130,7 @@ install_from_source() {
 }
 
 installed=0
-if [ "${RD_INSTALL_FROM_SOURCE:-0}" != "1" ]; then
+if [ "${RD_USE_RELEASE:-0}" = "1" ] && [ "${RD_INSTALL_FROM_SOURCE:-0}" != "1" ]; then
   _rd_log "下载 $URL …"
   if download "$URL" "$TMP/$ASSET"; then
     install_payload "$TMP/$ASSET"
