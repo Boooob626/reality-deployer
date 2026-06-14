@@ -28,7 +28,7 @@ log "域名=$DOMAIN  公网IP=${PUBLIC_IP:-未知}"
 log "组合: vless-reality=${ENABLE_VLESS_REALITY:-0} vless-tls=${ENABLE_VLESS_TLS:-0} vless-xhttp=${ENABLE_VLESS_XHTTP:-0} hysteria2=${ENABLE_HYSTERIA2:-0}"
 
 # 1) 基础包 + Xray + Angie
-pkg_ensure curl ca-certificates openssl ufw
+pkg_ensure curl ca-certificates openssl ufw kmod
 install_xray
 install_angie
 apply_perf_tuning

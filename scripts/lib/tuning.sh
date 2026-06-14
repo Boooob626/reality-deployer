@@ -6,9 +6,19 @@ apply_perf_tuning() {
   [ -d /proc/sys/net/ipv4 ] || { warn "当前内核不支持 sysctl 网络调优，跳过"; return 0; }
 
   local conf=/etc/sysctl.d/99-reality-deployer.conf
-  local cc=bbr
+  local modules_conf=/etc/modules-load.d/reality-deployer.conf
+  local cc=bbr require_bbr="${REQUIRE_BBR:-1}"
   local features=()
   if ! grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    if command -v modprobe >/dev/null 2>&1 && modprobe tcp_bbr 2>/dev/null; then
+      mkdir -p "$(dirname "$modules_conf")"
+      printf '%s\n' tcp_bbr >"$modules_conf"
+    fi
+  fi
+  if ! grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    if [ "$require_bbr" = "1" ]; then
+      die "当前内核无法加载 BBR（tcp_bbr）。请换支持 BBR 的内核/虚拟化，或以 REQUIRE_BBR=0 跳过强制 BBR。"
+    fi
     warn "内核未提供 BBR，保留当前拥塞控制，仅启用 fq/TFO（如可用）"
     cc=""
   fi

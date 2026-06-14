@@ -163,10 +163,13 @@ func TestUFWScriptHasApplyRevert(t *testing.T) {
 		},
 	}
 	s := UFWScript(fw)
-	for _, want := range []string{"ufw_apply()", "ufw_revert()", "22/tcp", "20000:50000/udp", "|| true"} {
+	for _, want := range []string{"ufw_apply()", "ufw_revert()", "ufw allow 22/tcp", "ufw delete allow 22/tcp", "20000:50000/udp", "|| true"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("ufw 脚本缺少 %q\n%s", want, s)
 		}
+	}
+	if strings.Contains(s, "ufw --force allow") || strings.Contains(s, "ufw --force delete") {
+		t.Errorf("ufw allow/delete 不支持 --force:\n%s", s)
 	}
 }
 

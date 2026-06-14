@@ -24,13 +24,13 @@ func UFWScript(fw manifest.Firewall) string {
 
 	b.WriteString("ufw_apply() {\n")
 	for _, r := range fw.Rules {
-		fmt.Fprintf(&b, "  ufw --force allow %s   # %s\n", ufwSpec(r), r.Note)
+		fmt.Fprintf(&b, "  ufw allow %s   # %s\n", ufwSpec(r), r.Note)
 	}
 	b.WriteString("}\n\n")
 
 	b.WriteString("ufw_revert() {\n")
 	for _, r := range fw.Rules {
-		fmt.Fprintf(&b, "  ufw --force delete allow %s >/dev/null 2>&1 || true   # %s\n", ufwSpec(r), r.Note)
+		fmt.Fprintf(&b, "  ufw delete allow %s >/dev/null 2>&1 || true   # %s\n", ufwSpec(r), r.Note)
 	}
 	b.WriteString("}\n")
 	return b.String()
